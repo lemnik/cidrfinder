@@ -1,5 +1,8 @@
-package components
+package components.cidrfinder
 
+import components.MaterialIcon
+import components.chip
+import components.toast
 import org.w3c.dom.HTMLTextAreaElement
 import react.RBuilder
 import kotlin.browser.document
@@ -11,7 +14,7 @@ fun copySuccess() {
 }
 
 fun fallbackCopyToClipboard(value: String) {
-    var textArea = document.createElement("textarea") as HTMLTextAreaElement
+    val textArea = document.createElement("textarea") as HTMLTextAreaElement
     textArea.value = value
     document.body?.appendChild(textArea)
 
@@ -44,7 +47,7 @@ fun copyToClipboard(value: String) {
     }
 }
 
-inline fun RBuilder.clipboardChip(
+fun RBuilder.clipboardChip(
         label: String,
         clipboardContent: String = label,
         cols: Int? = null,

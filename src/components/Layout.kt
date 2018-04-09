@@ -1,7 +1,5 @@
 package components
 
-import kotlinext.js.JsObject
-import kotlinext.js.Object
 import kotlinx.html.ButtonType
 import kotlinx.html.HTMLTag
 import kotlinx.html.attributesMapOf
@@ -10,7 +8,6 @@ import kotlinx.html.js.onClickFunction
 import react.RBuilder
 import react.dom.*
 import kotlin.browser.document
-import kotlin.js.Json
 
 inline fun RBuilder.page(title: String, actions: List<Pair<String, () -> Unit>> = emptyList(), block: RDOMBuilder<HTMLTag>.() -> Unit) {
     div("mdl-layout mdl-js-layout mdl-layout--fixed-header") {
@@ -24,9 +21,9 @@ inline fun RBuilder.page(title: String, actions: List<Pair<String, () -> Unit>> 
 
                 nav("mdl-navigation mdl-layout--large-screen-only") {
                     actions.forEach {
-                        val (title, onClick) = it
+                        val (label, onClick) = it
                         a("mdl-navigation__link") {
-                            +title
+                            +label
 
                             attrs {
                                 onClickFunction = { onClick() }

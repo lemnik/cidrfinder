@@ -1,4 +1,4 @@
-package components.composite
+package components.cidrfinder
 
 import app.Netmask
 import app.parseNetmask

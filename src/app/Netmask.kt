@@ -35,10 +35,8 @@ class Netmask(val base: Address, val bits: Int) {
     val broadcast: Address?
         get() = if (bits <= 30) (this.base + this.size - 1) else null
 
-    fun contains(address: Address): Boolean {
-        println("(${this}).contains(toString(${address})) = ${toString(address and netmask)} == ${toString(base and netmask)}")
-        return (address and netmask) == (base and netmask)
-    }
+    fun contains(address: Address): Boolean =
+        (address and netmask) == (base and netmask)
 
     fun contains(netmask: Netmask) =
             contains(netmask.base and netmask.netmask) and contains((netmask.broadcast ?: netmask.last) and netmask.netmask)

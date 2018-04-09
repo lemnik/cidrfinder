@@ -1,18 +1,17 @@
 package components
 
+import kotlinx.html.RP
 import org.w3c.dom.Element
-import react.RComponent
-import react.RProps
-import react.RState
+import react.*
 import react.dom.findDOMNode
 
 @JsName("componentHandler")
 internal external object MDL {
     @JsName("upgradeElement")
-    fun upgradeElement(e: Element): Unit
+    fun upgradeElement(e: Element)
 
     @JsName("downgradeElements")
-    fun downgradeElements(e: Element): Unit
+    fun downgradeElements(e: Element)
 }
 
 interface GridProps : RProps {
@@ -26,18 +25,12 @@ fun GridProps.cellClass(mod: Int = 0) = components.cellClass((cols ?: 0) + mod)
 
 abstract class MDLComponent<P : RProps, S : RState>(props: P) : RComponent<P, S>(props) {
 
-    override fun componentDidMount(): Unit {
-        val node = findDOMNode(this)
-        if (node != null) {
-            MDL.upgradeElement(node)
-        }
+    override fun componentDidMount() {
+        MDL.upgradeElement(findDOMNode(this))
     }
 
-    override fun componentWillUnmount(): Unit {
-        val node = findDOMNode(this)
-        if (node != null) {
-            MDL.downgradeElements(node)
-        }
+    override fun componentWillUnmount() {
+        MDL.downgradeElements(findDOMNode(this))
     }
 
     companion object {
@@ -45,6 +38,20 @@ abstract class MDLComponent<P : RProps, S : RState>(props: P) : RComponent<P, S>
         fun unique() = "__formRef${++idIdx}"
     }
 
+}
+
+interface UpgradeWrapperProps : RProps {
+    var block: RBuilder.() -> Unit
+}
+
+class UpgradeWrapperComponent(props: UpgradeWrapperProps) : MDLComponent<UpgradeWrapperProps, RState>(props) {
+    override fun RBuilder.render() {
+        props.block(this)
+    }
+}
+
+fun RBuilder.upgrade(block: RBuilder.() -> Unit) = child(UpgradeWrapperComponent::class) {
+    attrs.block = block
 }
 
 fun classes(baseClasses: String, vararg optionalClasses: Pair<Boolean, String>) =

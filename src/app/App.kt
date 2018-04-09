@@ -1,10 +1,16 @@
 package app
 
 import components.*
-import components.composite.networkCIDR
+import components.cidrfinder.clipboardChip
+import components.cidrfinder.networkCIDR
+import kotlinext.js.assign
+import org.w3c.dom.get
+import org.w3c.dom.set
 import react.*
 import react.dom.div
 import react.dom.form
+import kotlin.browser.localStorage
+import kotlin.browser.window
 import kotlin.math.pow
 
 interface AppState : RState {
@@ -16,12 +22,57 @@ interface AppState : RState {
 interface AppProps : RProps {
 }
 
+data class StoredState(
+        val rootNetwork: String?,
+        val existingSubnets: Array<Pair<String?, String?>>?,
+        val requiredSubnets: Array<Int>
+)
+
+fun AppState.toStoredState(): StoredState = StoredState(
+        rootNetmask.toString(),
+        existingSubnets?.map { it.first to it.second?.toString() }?.toTypedArray(),
+        requiredSubnets.toTypedArray()
+)
+
+fun AppState.fromStoredState(stored: StoredState) {
+    rootNetmask = stored.rootNetwork?.let { parseNetmask(it) }
+    existingSubnets = stored.existingSubnets?.map { Pair(it.first, it.second?.let { parseNetmask(it) }) }
+    requiredSubnets = stored.requiredSubnets.toIntArray()
+}
+
 class App(props: AppProps) : RComponent<AppProps, AppState>(props) {
 
     override fun AppState.init(props: AppProps) {
-        rootNetmask = Netmask(0, 0)
-        existingSubnets = emptyList()
-        requiredSubnets = intArrayOf(1, 0, 0, 0)
+        val storedState = localStorage["storedState"]
+
+        if (storedState != null) {
+            fromStoredState(JSON.parse<StoredState>(storedState))
+        } else {
+            rootNetmask = Netmask(0, 0)
+            existingSubnets = emptyList()
+            requiredSubnets = intArrayOf(1, 0, 0, 0)
+        }
+    }
+
+    private fun checkCollision(proposed: Netmask, existing: List<Netmask?>): Netmask? {
+        var collision = existing.find { it != null && it.contains(proposed) }
+        if (collision != null) {
+            return collision
+        } else {
+            collision = existing.find { it != null && proposed.contains(it) }
+            if (collision != null) {
+                return proposed
+            }
+        }
+
+        return null
+    }
+
+    private fun updateState(buildState: AppState.() -> Unit) {
+        setState({ assign(it, buildState) }) {
+            // save the state to local storage, once we've been properly updated
+            window.setTimeout({ localStorage.set("storedState", JSON.stringify(state.toStoredState())) }, 0)
+        }
     }
 
     private fun allocateSubnets(): List<Netmask?> {
@@ -29,7 +80,7 @@ class App(props: AppProps) : RComponent<AppProps, AppState>(props) {
         val existingNetworks = state.existingSubnets?.map { it.second }?.filterNotNull() ?: emptyList()
         val requiredSubnets = state.requiredSubnets
 
-        if (rootNetmask == null || requiredSubnets?.isEmpty()) {
+        if (rootNetmask == null || requiredSubnets.isEmpty()) {
             return emptyList()
         }
 
@@ -40,30 +91,15 @@ class App(props: AppProps) : RComponent<AppProps, AppState>(props) {
             if (requiredBits == 0) {
                 output.add(null)
             } else {
-                var collision: Netmask? = null
                 var proposed: Netmask
+                var collision: Netmask?
 
                 do {
                     proposed = Netmask(base, 32 - requiredBits)
-                    collision = existingNetworks.find { it.contains(proposed) }
-                    if (collision != null) {
-                        base = collision.nextStart()
-                    } else {
-                        collision = existingNetworks.find { proposed.contains(it) }
-                        if (collision != null) {
-                            base = proposed.nextStart()
-                        }
-                    }
+                    collision = checkCollision(proposed, existingNetworks)
+                            ?: checkCollision(proposed, output)
 
-                    collision = output.find { it != null && it.contains(proposed) }
-                    if (collision != null) {
-                        base = collision.nextStart()
-                    } else {
-                        collision = output.find { it != null && proposed.contains(it) }
-                        if (collision != null) {
-                            base = proposed.nextStart()
-                        }
-                    }
+                    base = collision?.nextStart() ?: base
                 } while (collision != null && rootNetmask.contains(proposed))
 
                 output.add(proposed.takeIf { rootNetmask.contains(proposed) })
@@ -74,7 +110,7 @@ class App(props: AppProps) : RComponent<AppProps, AppState>(props) {
         return output
     }
 
-    private inline fun RBuilder.requiredSubnet(allocatedSubnets: List<Netmask?>, index: Int, subnetSize: Int) {
+    private fun RBuilder.requiredSubnet(allocatedSubnets: List<Netmask?>, index: Int, subnetSize: Int) {
         form(action = "#", classes = "mdl-cell mdl-cell--12-col mdl-grid") {
             slider(0, 32, value = subnetSize, cols = 8, labeled = true,
                     label = {
@@ -82,7 +118,7 @@ class App(props: AppProps) : RComponent<AppProps, AppState>(props) {
                         else (2.0).pow((it ?: 0)).toInt().toString() + " addresses"
                     },
                     onChange = { newSize ->
-                        setState {
+                        updateState {
                             requiredSubnets = requiredSubnets.copyOf().also { it[index] = newSize }
                         }
                     }
@@ -100,7 +136,7 @@ class App(props: AppProps) : RComponent<AppProps, AppState>(props) {
 
             div(cellClass(1)) {
                 mbutton(icon = MaterialIcon.remove) {
-                    setState {
+                    updateState {
                         requiredSubnets = requiredSubnets.filterIndexed { i, _ -> i != index }.toIntArray()
                     }
                 }
@@ -111,18 +147,18 @@ class App(props: AppProps) : RComponent<AppProps, AppState>(props) {
     override fun RBuilder.render() {
         val allocatedSubnets = allocateSubnets() // FIXME: this should be moved somewhere more intelligent methinks
 
-        page("CIDR Finder") {
+        page("Subnet CIDR Finder") {
             card("Existing Network Structure") {
                 form(action = "#", classes = "mdl-cell mdl-cell--12-col mdl-grid") {
                     networkCIDR("Network CIDR", state.rootNetmask, 12, onNetmaskChanged = { newNetmask ->
-                        setState { rootNetmask = newNetmask }
+                        updateState { rootNetmask = newNetmask }
                     })
 
                     state.existingSubnets?.forEachIndexed { subnetIndex, subnet ->
                         existingSubnet(
                                 subnet,
                                 onNetmaskChange = { newNetmask ->
-                                    setState {
+                                    updateState {
                                         existingSubnets = state.existingSubnets?.mapIndexed { i, pair ->
                                             if (i == subnetIndex) (pair.first to newNetmask)
                                             else pair
@@ -130,7 +166,7 @@ class App(props: AppProps) : RComponent<AppProps, AppState>(props) {
                                     }
                                 },
                                 onNameChange = { newName ->
-                                    setState {
+                                    updateState {
                                         existingSubnets = state.existingSubnets?.mapIndexed { i, pair ->
                                             if (i == subnetIndex) (newName to pair.second)
                                             else pair
@@ -142,12 +178,12 @@ class App(props: AppProps) : RComponent<AppProps, AppState>(props) {
 
                     existingSubnet(null,
                             onNetmaskChange = { newNetmask ->
-                                setState {
+                                updateState {
                                     existingSubnets = (state.existingSubnets ?: emptyList()) + ("" to newNetmask)
                                 }
                             },
                             onNameChange = { newName ->
-                                setState {
+                                updateState {
                                     existingSubnets = (state.existingSubnets ?: emptyList()) + (newName to null)
                                 }
                             }
@@ -156,7 +192,7 @@ class App(props: AppProps) : RComponent<AppProps, AppState>(props) {
             }
 
             card("Required Subnets") {
-                state.requiredSubnets?.forEachIndexed { index, subnetSize ->
+                state.requiredSubnets.forEachIndexed { index, subnetSize ->
                     requiredSubnet(allocatedSubnets, index, subnetSize)
                 }
 
@@ -174,7 +210,7 @@ class App(props: AppProps) : RComponent<AppProps, AppState>(props) {
 
 fun RBuilder.existingSubnet(subnet: Pair<String?, Netmask?>?, onNetmaskChange: (Netmask) -> Unit, onNameChange: (String) -> Unit) {
     networkCIDR("Existing Subnet CIDR", subnet?.second, 6, onNetmaskChange)
-    mtextInput(label = "Subnet Name (optional)", cols = 6, onChanged = onNameChange)
+    mtextInput(label = "Subnet Name (optional)", value = subnet?.first ?: "", cols = 6, onChanged = onNameChange)
 }
 
 fun RBuilder.app() = child(App::class) {}

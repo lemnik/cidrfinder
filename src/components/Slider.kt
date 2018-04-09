@@ -30,7 +30,7 @@ class Slider(props: SliderProps) : MDLComponent<SliderProps, SliderState>(props)
         value = props.value ?: 0
     }
 
-    private inline fun RBuilder.wrapper(noinline block: RBuilder.() -> Unit) {
+    private fun RBuilder.wrapper(block: RBuilder.() -> Unit) {
         val cols = props.cols
         if (cols != null) {
             div(props.cellClass(props.labeled.opt(-2, 0))) {
@@ -43,20 +43,22 @@ class Slider(props: SliderProps) : MDLComponent<SliderProps, SliderState>(props)
 
     override fun RBuilder.render() {
         wrapper {
-            input(InputType.range, classes = "mdl-slider mdl-js-slider") {
-                attrs {
-                    min = props.min.toString()
-                    max = props.max.toString()
-                    value = state.value.toString()
+            upgrade {
+                input(InputType.range, classes = "mdl-slider mdl-js-slider") {
+                    attrs {
+                        min = props.min.toString()
+                        max = props.max.toString()
+                        value = state.value.toString()
 
-                    onChangeFunction = {
-                        val slider = it.target as HTMLInputElement
-                        val value = slider.value.toInt()
-                        setState {
-                            this.value = value
+                        onChangeFunction = {
+                            val slider = it.target as HTMLInputElement
+                            val value = slider.value.toInt()
+                            setState {
+                                this.value = value
+                            }
+
+                            props.onChange(value)
                         }
-
-                        props.onChange(value)
                     }
                 }
             }
@@ -77,7 +79,7 @@ fun RBuilder.slider(
         value: Int? = null,
         cols: Int? = null,
         labeled: Boolean = false,
-        label: (Int?) -> String = {(it ?: 0).toString()},
+        label: (Int?) -> String = { (it ?: 0).toString() },
         onChange: (Int) -> Unit = {}
 ) = child(Slider::class) {
     attrs.min = min
