@@ -11,6 +11,8 @@ You just need to enter your available network space, any eixsting subnets, and h
 address space you need for new subnets... the app finds the available space (if there is any)
 and gives you the CIDR blocks for your new subnets.
 
+You can try it out over here: https://lemnik.github.io/cidrfinder
+
 # Tech Stack
 
 This application is built with Kotlin and React both of which I really like, but this
